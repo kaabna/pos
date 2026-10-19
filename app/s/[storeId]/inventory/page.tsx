@@ -6,6 +6,7 @@ import { Camera, Plus, Truck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { CategoryManager } from "@/components/category-manager"; // استيراد مدير التصنيفات
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,21 +17,19 @@ type InventoryRow = {
   quantity: number; cost_price: number; selling_price: number; discount: number; imei_tracking: boolean;
 };
 type SupplierOption = { id: string; name: string };
+type CategoryOption = { value: string; label: string };
 
-const categories = [
-  { value: "accessory", label: "إكسسوارات" },
-  { value: "repair_part", label: "قطع صيانة" },
-  { value: "phone", label: "هواتف" },
-  { value: "service", label: "خدمات" },
-];
 const money = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 2 });
-const emptyForm = { name: "", category: "accessory", sku: "", barcode: "", quantity: "0", costPrice: "", sellingPrice: "", discount: "0", imeiTracking: false, supplierId: "" };
+const emptyForm = { name: "", category: "", sku: "", barcode: "", quantity: "0", costPrice: "", sellingPrice: "", discount: "0", imeiTracking: false, supplierId: "" };
 
 export default function StoreInventoryPage({ params }: { params: Promise<{ storeId: string }> }) {
   const { storeId } = use(params);
   const router = useRouter();
+  
   const [items, setItems] = useState<InventoryRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
+  const [dynamicCategories, setDynamicCategories] = useState<CategoryOption[]>([]); // حالة جديدة للتصنيفات
+  
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [form, setForm] = useState(emptyForm);
@@ -40,6 +39,18 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  const loadCategories = async () => {
+    const { data } = await getSupabaseClient().from("categories").select("slug, name").eq("store_id", storeId);
+    if (data) {
+      const cats = data.map((c) => ({ value: c.slug || c.name, label: c.name }));
+      setDynamicCategories(cats);
+      // تحديث قيمة التصنيف الافتراضي في الفورم لأول تصنيف إذا كان موجوداً
+      if (cats.length > 0 && form.category === "") {
+         setForm(prev => ({ ...prev, category: cats[0].value }));
+      }
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -51,11 +62,15 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
       ]);
       if (!active) return;
       if (error) setMessage("تعذر تحميل المخزون. تحقق من إعداد قاعدة البيانات وصلاحيات الحساب.");
+      
       setItems((rows ?? []) as InventoryRow[]);
       setSuppliers((supplierRows ?? []) as SupplierOption[]);
       setLoading(false);
     }
+    
     void loadInventory();
+    void loadCategories();
+    
     return () => { active = false; };
   }, [storeId]);
 
@@ -68,10 +83,14 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
     event.preventDefault();
     setSaving(true);
     setMessage("");
+    
+    // تأكد من وجود تصنيف تم اختياره
+    const selectedCategory = form.category || (dynamicCategories.length > 0 ? dynamicCategories[0].value : "أخرى");
+
     const { data, error } = await getSupabaseClient().from("inventory_items").insert({
       store_id: storeId,
       name: form.name.trim(),
-      category: form.category,
+      category: selectedCategory,
       sku: form.sku.trim(),
       barcode: form.barcode.trim() || null,
       quantity: Number(form.quantity),
@@ -98,12 +117,16 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><p className="text-sm text-cyan-300">المخزون</p><h2 className="mt-2 text-2xl font-semibold text-white">مخزون المتجر</h2></div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" onClick={() => { setForm(emptyForm); setShowForm(true); }}><Plus size={16} /> إضافة عنصر</Button>
+            <Button type="button" onClick={() => { setForm({ ...emptyForm, category: dynamicCategories[0]?.value || "" }); setShowForm(true); }}><Plus size={16} /> إضافة عنصر</Button>
             <Button type="button" variant="secondary" onClick={() => router.push(`/s/${storeId}/purchases`)}><Truck size={16} /> استيراد من مورد</Button>
           </div>
         </div>
 
+        {/* عرض مدير التصنيفات الديناميكي هنا */}
+        <CategoryManager storeId={storeId} onCategoryAdded={loadCategories} />
+
         {message ? <p role="status" className="rounded-lg border border-slate-700 bg-slate-900 p-3 text-sm text-slate-200">{message}</p> : null}
+        
         <Card>
           <CardContent className="space-y-4 p-4">
             <div className="flex flex-col gap-2 md:flex-row">
@@ -113,7 +136,7 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
               <Button type="button" variant="secondary" onClick={() => { setScannerTarget("search"); setShowScanner(true); }} title="مسح بالكاميرا" aria-label="مسح بالكاميرا"><Camera size={16} /> مسح بالكاميرا</Button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {[{ value: "all", label: "الكل" }, ...categories].map((category) => (
+              {[{ value: "all", label: "الكل" }, ...dynamicCategories].map((category) => (
                 <button key={category.value} type="button" onClick={() => setFilter(category.value)} className={`rounded-md px-3 py-2 text-sm ${filter === category.value ? "bg-cyan-500 text-slate-950" : "bg-slate-800 text-slate-200 hover:bg-slate-700"}`}>{category.label}</button>
               ))}
             </div>
@@ -130,7 +153,7 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
                 <thead><tr className="border-b border-slate-800 text-xs text-slate-400"><th className="py-3 pr-3">المنتج</th><th className="py-3 pr-3">الفئة</th><th className="py-3 pr-3">الكمية</th><th className="py-3 pr-3">التكلفة</th><th className="py-3 pr-3">سعر البيع</th><th className="py-3 pr-3">الخصم</th><th className="py-3 pr-3">تتبع IMEI</th></tr></thead>
                 <tbody>{visibleItems.map((item) => <tr key={item.id} className="border-b border-slate-800 last:border-0">
                   <td className="py-3 pr-3"><span className="block font-medium text-white">{item.name}</span><span className="text-xs text-slate-500">{item.sku}{item.barcode ? ` · ${item.barcode}` : ""}</span></td>
-                  <td className="py-3 pr-3"><Badge variant="info">{categories.find((category) => category.value === item.category)?.label ?? "أخرى"}</Badge></td>
+                  <td className="py-3 pr-3"><Badge variant="info">{dynamicCategories.find((category) => category.value === item.category)?.label ?? item.category}</Badge></td>
                   <td className="py-3 pr-3 text-white">{money.format(item.quantity)}</td><td className="py-3 pr-3">{money.format(item.cost_price)} د.إ</td><td className="py-3 pr-3">{money.format(item.selling_price)} د.إ</td><td className="py-3 pr-3">{money.format(item.discount)}٪</td><td className="py-3 pr-3">{item.imei_tracking ? "نعم" : "لا"}</td>
                 </tr>)}</tbody>
               </table>
@@ -147,12 +170,29 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
               <Input label="اسم المنتج" required value={form.name} onChange={(name) => setForm({ ...form, name })} />
               <Input label="SKU" required value={form.sku} onChange={(sku) => setForm({ ...form, sku })} />
               <div className="flex items-end gap-2"><Input label="الباركود أو QR" value={form.barcode} onChange={(barcode) => setForm({ ...form, barcode })} /><Button type="button" variant="secondary" onClick={() => { setScannerTarget("item"); setShowScanner(true); }} title="مسح رمز المنتج" aria-label="مسح رمز المنتج"><Camera size={16} /></Button></div>
-              <label className="space-y-2 text-sm text-slate-300"><span>الفئة</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">{categories.map((category) => <option value={category.value} key={category.value}>{category.label}</option>)}</select></label>
+              
+              {/* قائمة التصنيفات الديناميكية في نموذج الإضافة */}
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>الفئة</span>
+                <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+                  {dynamicCategories.length === 0 ? <option value="أخرى">أخرى (أضف تصنيفات أولاً)</option> : null}
+                  {dynamicCategories.map((category) => <option value={category.value} key={category.value}>{category.label}</option>)}
+                </select>
+              </label>
+              
               <Input label="الكمية" type="number" min="0" required value={form.quantity} onChange={(quantity) => setForm({ ...form, quantity })} />
               <Input label="سعر التكلفة" type="number" min="0" step="0.01" required value={form.costPrice} onChange={(costPrice) => setForm({ ...form, costPrice })} />
               <Input label="سعر البيع" type="number" min="0" step="0.01" required value={form.sellingPrice} onChange={(sellingPrice) => setForm({ ...form, sellingPrice })} />
               <Input label="الخصم بالنسبة المئوية" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={(discount) => setForm({ ...form, discount })} />
-              <label className="space-y-2 text-sm text-slate-300"><span>المورد</span><select value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white"><option value="">بدون مورد</option>{suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}</select></label>
+              
+              <label className="space-y-2 text-sm text-slate-300">
+                <span>المورد</span>
+                <select value={form.supplierId} onChange={(event) => setForm({ ...form, supplierId: event.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
+                  <option value="">بدون مورد</option>
+                  {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                </select>
+              </label>
+              
               <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-300"><input type="checkbox" checked={form.imeiTracking} onChange={(event) => setForm({ ...form, imeiTracking: event.target.checked })} /><span>تتبع رقم IMEI</span></label>
             </div>
             {message ? <p role="alert" className="text-sm text-rose-200">{message}</p> : null}
@@ -160,6 +200,7 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
           </form>
         </section>
       </div> : null}
+      
       {showScanner ? <BarcodeScanner onClose={() => setShowScanner(false)} onDetected={(value) => {
         if (scannerTarget === "item") setForm((current) => ({ ...current, barcode: value }));
         else setSearch(value);
