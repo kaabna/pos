@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { getSupabaseClient } from "@/lib/supabase";
+import { ShiftHandoverModal } from "@/components/shift-handover-modal"; // تم استيراد نافذة الشفت
 
 type AppRole = "owner" | "admin" | "employee";
 type StoreChoice = { id: string; name: string; city: string };
@@ -43,6 +44,10 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
   const [permissions, setPermissions] = useState<string[]>([]);
   const [stores, setStores] = useState<StoreChoice[]>([]);
   const [currentStore, setCurrentStore] = useState<StoreChoice | null>(null);
+  
+  // حالات جديدة خاصة بتسليم الشفت
+  const [employeeName, setEmployeeName] = useState<string>("موظف"); 
+  const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -51,6 +56,9 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
       const supabase = getSupabaseClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      // جلب اسم الموظف أو إيميله لتسجيله في جرد الشفت
+      setEmployeeName(user.email || "موظف");
 
       const [{ data: profile }, { data: memberships }, { data: storeRows }] = await Promise.all([
         supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
@@ -158,9 +166,22 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
                 {currentStore ? `متجر ${currentStore.name}` : "إدارة المحلات"}
               </h1>
             </div>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
               {isManager && storeId ? <Link href="/stores" className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"><StoreIcon size={15} /> كل المحلات</Link> : null}
-              <span className="text-sm text-slate-300">
+              
+              {/* زر تسليم الشفت الجديد */}
+              {storeId && (
+                <button
+                  type="button"
+                  onClick={() => setIsShiftModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors shadow-sm"
+                >
+                  <ClipboardCheck size={16} />
+                  تسليم الشفت
+                </button>
+              )}
+
+              <span className="text-sm text-slate-300 hidden sm:inline-block">
                 {role === "owner" ? "مالك النظام" : role === "admin" ? "مدير النظام" : role === "employee" ? "موظف" : ""}
               </span>
               <button
@@ -177,6 +198,16 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
           {children}
         </main>
       </div>
+
+      {/* استدعاء مكون نافذة الشفت */}
+      {storeId && currentStore && (
+        <ShiftHandoverModal
+          storeId={currentStore.id}
+          employeeName={employeeName}
+          isOpen={isShiftModalOpen}
+          onClose={() => setIsShiftModalOpen(false)}
+        />
+      )}
     </div>
   );
 }
