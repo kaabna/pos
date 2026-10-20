@@ -40,7 +40,8 @@ export async function GET(_request: NextRequest, context: RouteContext<"/api/sto
   if (!authorized) return NextResponse.json({ message: "غير مصرح." }, { status: 403 });
 
   const db = getAdminClient() ?? sessionClient;
-  const [{ data: customRows }, { data: itemRows }] = await Promise.all([
+  const [{ data: existingCatRows }, { data: customRows }, { data: itemRows }] = await Promise.all([
+    db.from("categories").select("name").eq("store_id", storeId).order("created_at"),
     db.from("store_categories").select("name").eq("store_id", storeId).order("created_at"),
     db.from("inventory_items").select("category").eq("store_id", storeId),
   ]);
@@ -48,6 +49,11 @@ export async function GET(_request: NextRequest, context: RouteContext<"/api/sto
   const map = new Map<string, string>();
   for (const cat of defaultCategories) {
     map.set(cat.value, cat.label);
+  }
+  for (const row of existingCatRows ?? []) {
+    if (row.name && !map.has(row.name)) {
+      map.set(row.name, row.name);
+    }
   }
   for (const row of customRows ?? []) {
     if (row.name && !map.has(row.name)) {
@@ -79,8 +85,39 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/sto
   }
 
   const db = getAdminClient() ?? sessionClient;
-  // محاولة الحفظ في جدول store_categories إن كان مطبقاً في قاعدة البيانات
-  await db.from("store_categories").upsert({ store_id: storeId, name }, { onConflict: "store_id,name" });
+  // الحفظ في جدول categories الموجود بالفعل في Supabase أولاً
+  const { error: catErr } = await db.from("categories").insert({ store_id: storeId, name, slug: name });
+  if (catErr) {
+    // محاولة بديلة في جدول store_categories إن كان مستخدماً
+    try {
+      await db.from("store_categories").upsert({ store_id: storeId, name }, { onConflict: "store_id,name" });
+    } catch {
+      // تجاهل إذا لم يكن الجدول مفعلاً بعد
+    }
+  }
 
   return NextResponse.json({ category: { value: name, label: name }, message: "تمت إضافة التصنيف بنجاح." }, { status: 201 });
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext<"/api/stores/[storeId]/categories">) {
+  const { storeId } = await context.params;
+  const { authorized, sessionClient } = await verifyStoreAccess(storeId);
+  if (!authorized) return NextResponse.json({ message: "غير مصرح بحذف التصنيف." }, { status: 403 });
+
+  const body: unknown = await request.json().catch(() => null);
+  const name = body && typeof body === "object" && typeof (body as { name?: unknown }).name === "string"
+    ? (body as { name: string }).name.trim()
+    : "";
+
+  if (!name) {
+    return NextResponse.json({ message: "حدد اسم التصنيف للحذف." }, { status: 400 });
+  }
+
+  const db = getAdminClient() ?? sessionClient;
+  await Promise.all([
+    db.from("categories").delete().eq("store_id", storeId).eq("name", name),
+    db.from("store_categories").delete().eq("store_id", storeId).eq("name", name),
+  ]);
+
+  return NextResponse.json({ message: "تم حذف التصنيف بنجاح." });
 }

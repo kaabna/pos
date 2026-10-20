@@ -30,33 +30,53 @@ create policy store_categories_write on public.store_categories for all to authe
 create table if not exists public.shifts (
   id uuid primary key default gen_random_uuid(),
   store_id uuid not null references public.stores(id) on delete cascade,
-  user_id uuid not null references public.profiles(id) on delete cascade,
-  cashier_name text not null default '',
-  status text not null default 'open' check (status in ('open', 'closed')),
-  opening_cash numeric(12,2) not null default 0 check (opening_cash >= 0),
-  expected_cash numeric(12,2) not null default 0,
-  expected_card numeric(12,2) not null default 0,
-  expected_transfer numeric(12,2) not null default 0,
-  expected_wallet numeric(12,2) not null default 0,
-  expenses_total numeric(12,2) not null default 0 check (expenses_total >= 0),
-  shift_expenses jsonb not null default '[]'::jsonb,
-  accounts_config jsonb not null default '[]'::jsonb,
-  expected_breakdown jsonb not null default '{}'::jsonb,
-  actual_breakdown jsonb not null default '{}'::jsonb,
-  actual_cash numeric(12,2),
-  actual_card numeric(12,2),
-  actual_transfer numeric(12,2),
-  actual_wallet numeric(12,2),
-  difference numeric(12,2),
-  is_matched boolean,
-  notes text not null default '',
-  opened_at timestamptz not null default now(),
-  closed_at timestamptz
+  opened_at timestamptz not null default now()
 );
 
+-- ضمان وجود كافة الأعمدة في جدول الشفتات سواء كان الجدول منشأ مسبقاً أو جديداً
+alter table public.shifts add column if not exists user_id uuid references public.profiles(id) on delete cascade;
+alter table public.shifts add column if not exists cashier_name text not null default '';
+alter table public.shifts add column if not exists status text not null default 'open';
+alter table public.shifts add column if not exists opening_cash numeric(12,2) not null default 0;
+alter table public.shifts add column if not exists expected_cash numeric(12,2) not null default 0;
+alter table public.shifts add column if not exists expected_card numeric(12,2) not null default 0;
+alter table public.shifts add column if not exists expected_transfer numeric(12,2) not null default 0;
+alter table public.shifts add column if not exists expected_wallet numeric(12,2) not null default 0;
+alter table public.shifts add column if not exists expenses_total numeric(12,2) not null default 0;
+alter table public.shifts add column if not exists shift_expenses jsonb not null default '[]'::jsonb;
 alter table public.shifts add column if not exists accounts_config jsonb not null default '[]'::jsonb;
 alter table public.shifts add column if not exists expected_breakdown jsonb not null default '{}'::jsonb;
 alter table public.shifts add column if not exists actual_breakdown jsonb not null default '{}'::jsonb;
+alter table public.shifts add column if not exists actual_cash numeric(12,2);
+alter table public.shifts add column if not exists actual_card numeric(12,2);
+alter table public.shifts add column if not exists actual_transfer numeric(12,2);
+alter table public.shifts add column if not exists actual_wallet numeric(12,2);
+alter table public.shifts add column if not exists difference numeric(12,2);
+alter table public.shifts add column if not exists is_matched boolean;
+alter table public.shifts add column if not exists notes text not null default '';
+alter table public.shifts add column if not exists opened_at timestamptz not null default now();
+alter table public.shifts add column if not exists closed_at timestamptz;
+
+-- دعم جدول categories العام للتصنيفات
+create table if not exists public.categories (
+  id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores(id) on delete cascade,
+  name text not null,
+  slug text,
+  icon text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.categories enable row level security;
+
+drop policy if exists categories_read on public.categories;
+create policy categories_read on public.categories for select to authenticated
+  using (public.can_access_store(store_id));
+
+drop policy if exists categories_write on public.categories;
+create policy categories_write on public.categories for all to authenticated
+  using (public.can_access_store(store_id, 'inventory') or public.can_access_store(store_id, 'pos'))
+  with check (public.can_access_store(store_id, 'inventory') or public.can_access_store(store_id, 'pos'));
 
 alter table public.shifts enable row level security;
 
@@ -152,6 +172,7 @@ end;
 $$;
 
 grant select, insert, update, delete on public.store_categories to authenticated;
+grant select, insert, update, delete on public.categories to authenticated;
 grant select, insert, update, delete on public.shifts to authenticated;
 grant insert, update, delete on public.store_members to authenticated;
 grant update on public.inventory_items to authenticated;
