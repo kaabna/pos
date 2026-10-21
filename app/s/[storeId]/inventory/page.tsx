@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, Camera, FileSpreadsheet, FolderPlus, Pencil, Plus, Trash2, Truck } from "lucide-react";
+import { AlertTriangle, Camera, Download, FileSpreadsheet, FolderPlus, Pencil, Plus, Trash2, Truck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { ExcelExportModal } from "@/components/excel-export-modal";
 import { ExcelImportModal } from "@/components/excel-import-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -70,6 +71,7 @@ export default function StoreInventoryPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showExcelImport, setShowExcelImport] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [scannerTarget, setScannerTarget] = useState<"search" | "item" | "edit">("search");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -352,6 +354,14 @@ export default function StoreInventoryPage() {
               className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
             >
               <FileSpreadsheet size={16} /> استيراد من إكسل
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowExportModal(true)}
+              className="border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Download size={16} /> تصدير المخزون
             </Button>
             <Button type="button" variant="secondary" onClick={() => setShowCategoryInput((prev) => !prev)}>
               <FolderPlus size={16} /> إضافة تصنيف جديد
@@ -886,6 +896,14 @@ export default function StoreInventoryPage() {
         onSuccess={() => {
           void reloadInventory();
         }}
+      />
+
+      <ExcelExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        items={items}
+        categories={categories}
+        currentSearch={search}
       />
     </AppShell>
   );
