@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { KeyRound, Trash2, UserPlus } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -21,8 +22,9 @@ const permissionOptions = [
   { key: "ledger", label: "التقارير المالية" },
 ];
 
-export default function EmployeesPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function EmployeesPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
   const [email, setEmail] = useState("");
@@ -46,13 +48,15 @@ export default function EmployeesPage({ params }: { params: Promise<{ storeId: s
       setMessage("تعذر تحميل أعضاء المتجر.");
       return;
     }
-    const memberIds = (memberships ?? []).map((membership) => membership.user_id);
+    const memberList = (memberships as Array<{ user_id: string; permissions: string[] }> | null) ?? [];
+    const memberIds = memberList.map((membership: { user_id: string }) => membership.user_id);
     const { data: profiles } = memberIds.length
       ? await supabase.from("profiles").select("id, full_name, role").in("id", memberIds)
       : { data: [] };
+    const profileList = (profiles as Array<{ id: string; full_name?: string; role?: "owner" | "admin" | "employee" }> | null) ?? [];
     setEmployees(
-      (memberships ?? []).map((membership) => {
-        const profile = (profiles ?? []).find((item) => item.id === membership.user_id);
+      memberList.map((membership: { user_id: string; permissions: string[] }) => {
+        const profile = profileList.find((item: { id: string }) => item.id === membership.user_id);
         return {
           id: membership.user_id,
           full_name: profile?.full_name ?? "",
@@ -72,10 +76,12 @@ export default function EmployeesPage({ params }: { params: Promise<{ storeId: s
         .from("store_members")
         .select("user_id, permissions")
         .eq("store_id", storeId);
-      const memberIds = (memberships ?? []).map((membership) => membership.user_id);
+      const memberList = (memberships as Array<{ user_id: string; permissions: string[] }> | null) ?? [];
+      const memberIds = memberList.map((membership: { user_id: string }) => membership.user_id);
       const { data: profiles } = memberIds.length
         ? await supabase.from("profiles").select("id, full_name, role").in("id", memberIds)
         : { data: [] };
+      const profileList = (profiles as Array<{ id: string; full_name?: string; role?: "owner" | "admin" | "employee" }> | null) ?? [];
       if (!active) return;
       if (error) setMessage("تعذر تحميل أعضاء المتجر.");
       const { data: profile } = user
@@ -84,8 +90,8 @@ export default function EmployeesPage({ params }: { params: Promise<{ storeId: s
       setCurrentUserId(user?.id ?? "");
       setIsManager(profile?.role === "owner" || profile?.role === "admin");
       setEmployees(
-        (memberships ?? []).map((membership) => {
-          const memberProfile = (profiles ?? []).find((item) => item.id === membership.user_id);
+        memberList.map((membership: { user_id: string; permissions: string[] }) => {
+          const memberProfile = profileList.find((item: { id: string }) => item.id === membership.user_id);
           return {
             id: membership.user_id,
             full_name: memberProfile?.full_name ?? "",

@@ -38,6 +38,7 @@ const storeNavigation: NavItem[] = [
 
 export function AppShell({ children, storeId }: { children: ReactNode; storeId?: string }) {
   const pathname = usePathname();
+  const currentPath = pathname ?? "";
   const router = useRouter();
   const [role, setRole] = useState<AppRole | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
@@ -48,42 +49,62 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
     let active = true;
 
     async function loadAccess() {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const supabase = getSupabaseClient();
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+        if (!user) return;
 
-      const [{ data: profile }, { data: memberships }, { data: storeRows }] = await Promise.all([
-        supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
-        supabase.from("store_members").select("store_id, permissions").eq("user_id", user.id),
-        supabase.from("stores").select("id, name, city").order("name"),
-      ]);
+        const [{ data: profile }, { data: memberships }, { data: storeRows }] = await Promise.all([
+          supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),
+          supabase.from("store_members").select("store_id, permissions").eq("user_id", user.id),
+          storeId
+            ? supabase.from("stores").select("id, name, city").eq("id", storeId).maybeSingle()
+            : supabase.from("stores").select("id, name, city").order("name"),
+        ]);
 
-      if (!active) return;
-      const userRole = profile?.role;
-      if (userRole === "owner" || userRole === "admin" || userRole === "employee") {
-        setRole(userRole);
+        if (!active) return;
+        const userRole = profile?.role;
+        if (userRole === "owner" || userRole === "admin" || userRole === "employee") {
+          setRole(userRole);
+        }
+
+        const memberList = (memberships as Array<{ store_id: string; permissions: string[] }> | null) ?? [];
+        const member = memberList.find((item: { store_id: string }) => item.store_id === storeId) ?? memberList[0];
+        setPermissions(Array.isArray(member?.permissions) ? member.permissions : []);
+        const allowedStoreIds = new Set(memberList.map((item: { store_id: string }) => item.store_id));
+
+        let allStores: StoreChoice[] = [];
+        if (Array.isArray(storeRows)) {
+          allStores = storeRows.map((store) => ({
+            id: store.id,
+            name: store.name,
+            city: store.city,
+          }));
+        } else if (storeRows && typeof storeRows === "object" && "id" in storeRows) {
+          allStores = [{
+            id: (storeRows as StoreChoice).id,
+            name: (storeRows as StoreChoice).name,
+            city: (storeRows as StoreChoice).city,
+          }];
+        }
+
+        const isAdminUser = userRole === "owner" || userRole === "admin";
+        const visibleStores = isAdminUser
+          ? allStores
+          : allStores.filter((store) => allowedStoreIds.has(store.id)).slice(0, 1);
+
+        if (!isAdminUser && visibleStores.length > 0 && (!storeId || storeId !== visibleStores[0].id)) {
+          router.replace(`/s/${visibleStores[0].id}`);
+          return;
+        }
+
+        setStores(visibleStores);
+        const resolvedCurrent = (storeId ? visibleStores.find((store) => store.id === storeId) : null) ?? visibleStores[0] ?? null;
+        setCurrentStore(resolvedCurrent);
+      } catch {
+        // حماية التطبيق من أي انهيار غير متوقع أثناء معالجة الجلسة
       }
-
-      const member = memberships?.find((item) => item.store_id === storeId) ?? memberships?.[0];
-      setPermissions(Array.isArray(member?.permissions) ? member.permissions : []);
-      const allowedStoreIds = new Set((memberships ?? []).map((item) => item.store_id));
-      const allStores = (storeRows ?? []).map((store) => ({
-        id: store.id,
-        name: store.name,
-        city: store.city,
-      }));
-      const isAdminUser = userRole === "owner" || userRole === "admin";
-      const visibleStores = isAdminUser
-        ? allStores
-        : allStores.filter((store) => allowedStoreIds.has(store.id)).slice(0, 1);
-
-      if (!isAdminUser && visibleStores.length > 0 && (!storeId || storeId !== visibleStores[0].id)) {
-        router.replace(`/s/${visibleStores[0].id}`);
-        return;
-      }
-
-      setStores(visibleStores);
-      setCurrentStore(visibleStores.find((store) => store.id === storeId) ?? visibleStores[0] ?? null);
     }
 
     void loadAccess();
@@ -98,13 +119,16 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
     : [{ href: "/stores", label: "المحلات", icon: StoreIcon }];
 
   async function signOut() {
-    await getSupabaseClient().auth.signOut();
-    router.replace("/login");
-    router.refresh();
+    try {
+      await getSupabaseClient().auth.signOut();
+    } finally {
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/login";
+    }
   }
 
   function switchStore(nextStoreId: string) {
-    const suffix = storeId ? pathname.replace(`/s/${storeId}`, "") : "";
+    const suffix = storeId && currentPath ? currentPath.replace(`/s/${storeId}`, "") : "";
     router.push(`/s/${nextStoreId}${suffix}`);
   }
 
@@ -144,7 +168,7 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
           <nav aria-label="التنقل الرئيسي" className="flex flex-wrap gap-2 lg:flex-col">
             {navigation.map(({ href, label, icon: Icon }) => {
               const resolvedHref = storeId ? `/s/${storeId}${href}` : href;
-              const isActive = pathname === resolvedHref || (resolvedHref !== `/s/${storeId}` && pathname.startsWith(`${resolvedHref}/`));
+              const isActive = currentPath === resolvedHref || (resolvedHref !== `/s/${storeId}` && currentPath.startsWith(`${resolvedHref}/`));
               return (
                 <Link
                   key={resolvedHref}

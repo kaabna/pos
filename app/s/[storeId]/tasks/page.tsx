@@ -1,6 +1,8 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
+import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +18,9 @@ const statusNames: Record<TaskStatus, string> = { open: "مفتوحة", in_progr
 const priorityNames = { low: "منخفضة", normal: "متوسطة", high: "عالية" };
 const priorityVariants = { low: "success", normal: "warning", high: "danger" } as const;
 
-export default function TasksPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function TasksPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [currentUserId, setCurrentUserId] = useState("");
@@ -38,7 +41,8 @@ export default function TasksPage({ params }: { params: Promise<{ storeId: strin
         supabase.from("tasks").select("id, title, description, assignee_id, due_date, priority, proof_required, proof_link, proof_note, status, created_at").eq("store_id", storeId).order("created_at", { ascending: false }),
         supabase.from("store_members").select("user_id").eq("store_id", storeId),
       ]);
-      const memberIds = (memberships ?? []).map((member) => member.user_id);
+      const memberList = (memberships as Array<{ user_id: string }> | null) ?? [];
+      const memberIds = memberList.map((member: { user_id: string }) => member.user_id);
       const { data: people } = memberIds.length
         ? await supabase.from("profiles").select("id, full_name, role").in("id", memberIds).eq("role", "employee").order("full_name")
         : { data: [] };

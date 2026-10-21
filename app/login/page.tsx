@@ -1,7 +1,6 @@
 "use client";
 
 import { AlertCircle, ArrowRight, Lock, ShieldCheck, User } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSupabaseClient } from "@/lib/supabase";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,7 +21,7 @@ export default function LoginPage() {
     try {
       const supabase = getSupabaseClient();
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
@@ -46,8 +44,8 @@ export default function LoginPage() {
       }
 
       if (profile.role === "owner" || profile.role === "admin") {
-        router.push("/stores");
-        router.refresh();
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.href = "/stores";
         return;
       }
 
@@ -63,7 +61,7 @@ export default function LoginPage() {
         .maybeSingle();
 
       if (memberError) throw memberError;
-      if (!memberData) {
+      if (!memberData?.store_id) {
         throw new Error("هذا الحساب غير مرتبط بأي متجر. يرجى من المدير ربطه من صفحة (الموظفون) داخل المحل المطلوب.");
       }
 
@@ -71,15 +69,16 @@ export default function LoginPage() {
       const firstModule = ["pos", "inventory", "repairs", "tasks", "roadmap", "purchases", "employees", "ledger"].find((module) =>
         permittedModules.includes(module),
       );
-      router.push(firstModule ? `/s/${memberData.store_id}/${firstModule}` : `/s/${memberData.store_id}`);
-      router.refresh();
+      
+      const targetUrl = firstModule ? `/s/${memberData.store_id}/${firstModule}` : `/s/${memberData.store_id}`;
+      // استخدام window.location.href لتوجيه المتصفح بشكل كامل مع تأكيد حفظ وإرسال ملفات الكوكيز في سفاري / iOS
+      window.location.href = targetUrl;
     } catch (caught) {
       const errorMessage = caught instanceof Error ? caught.message : "";
-      const message = ["صلاحية", "هذا الحساب", "لا يوجد"].some((prefix) => errorMessage.startsWith(prefix))
+      const message = ["صلاحية", "هذا الحساب", "لا يوجد", "لم يتم"].some((prefix) => errorMessage.startsWith(prefix))
         ? errorMessage
         : "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور ثم حاول مجددًا.";
       setError(message);
-    } finally {
       setIsLoading(false);
     }
   };

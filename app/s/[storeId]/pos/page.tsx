@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -126,8 +127,9 @@ const initialAccountsConfig: ShiftAccountConfig[] = [
 
 const money = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 2 });
 
-export default function StorePOSPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function StorePOSPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [products, setProducts] = useState<Product[]>([]);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [category, setCategory] = useState("all");
@@ -169,53 +171,58 @@ export default function StorePOSPage({ params }: { params: Promise<{ storeId: st
   const [closedReport, setClosedReport] = useState<ClosedShiftReport | null>(null);
 
   useEffect(() => {
+    if (!storeId) return;
     let active = true;
     async function loadPOS() {
-      const supabase = getSupabaseClient();
-      const [{ data, error }, shiftRes] = await Promise.all([
-        supabase
-          .from("inventory_items")
-          .select("id, name, category, sku, barcode, quantity, selling_price, discount")
-          .eq("store_id", storeId)
-          .gt("quantity", 0)
-          .order("name"),
-        fetch(`/api/stores/${storeId}/shifts`).then((res) => (res.ok ? res.json() : null)).catch(() => null),
-      ]);
-      if (!active) return;
-      if (error) setMessage("تعذر تحميل المنتجات لهذا المتجر.");
-      setProducts((data ?? []) as Product[]);
+      try {
+        const supabase = getSupabaseClient();
+        const [{ data, error }, shiftRes] = await Promise.all([
+          supabase
+            .from("inventory_items")
+            .select("id, name, category, sku, barcode, quantity, selling_price, discount")
+            .eq("store_id", storeId)
+            .gt("quantity", 0)
+            .order("name"),
+          fetch(`/api/stores/${storeId}/shifts`).then((res) => (res.ok ? res.json() : null)).catch(() => null),
+        ]);
+        if (!active) return;
+        if (error) setMessage("تعذر تحميل المنتجات لهذا المتجر.");
+        setProducts((data ?? []) as Product[]);
 
-      const shiftData = shiftRes as {
-        openShift?: OpenShift | null;
-        savedAccounts?: ShiftAccountConfig[];
-      } | null;
+        const shiftData = shiftRes as {
+          openShift?: OpenShift | null;
+          savedAccounts?: ShiftAccountConfig[];
+        } | null;
 
-      if (shiftData?.savedAccounts && Array.isArray(shiftData.savedAccounts) && shiftData.savedAccounts.length > 0) {
-        setShiftAccounts(shiftData.savedAccounts);
-      }
-
-      if (shiftData?.openShift) {
-        setOpenShift(shiftData.openShift);
-        if (Array.isArray(shiftData.openShift.accounts_config) && shiftData.openShift.accounts_config.length > 0) {
-          setShiftAccounts(shiftData.openShift.accounts_config);
+        if (shiftData?.savedAccounts && Array.isArray(shiftData.savedAccounts) && shiftData.savedAccounts.length > 0) {
+          setShiftAccounts(shiftData.savedAccounts);
         }
-        try {
-          localStorage.setItem(`pos_open_shift_${storeId}`, JSON.stringify(shiftData.openShift));
-        } catch {}
-      } else {
-        try {
-          const cached = localStorage.getItem(`pos_open_shift_${storeId}`);
-          if (cached) {
-            const parsed = JSON.parse(cached) as OpenShift;
-            setOpenShift(parsed);
-            if (Array.isArray(parsed.accounts_config) && parsed.accounts_config.length > 0) {
-              setShiftAccounts(parsed.accounts_config);
-            }
-          }
-        } catch {}
-      }
 
-      setLoading(false);
+        if (shiftData?.openShift) {
+          setOpenShift(shiftData.openShift);
+          if (Array.isArray(shiftData.openShift.accounts_config) && shiftData.openShift.accounts_config.length > 0) {
+            setShiftAccounts(shiftData.openShift.accounts_config);
+          }
+          try {
+            localStorage.setItem(`pos_open_shift_${storeId}`, JSON.stringify(shiftData.openShift));
+          } catch {}
+        } else {
+          try {
+            const cached = localStorage.getItem(`pos_open_shift_${storeId}`);
+            if (cached) {
+              const parsed = JSON.parse(cached) as OpenShift;
+              setOpenShift(parsed);
+              if (Array.isArray(parsed?.accounts_config) && parsed.accounts_config.length > 0) {
+                setShiftAccounts(parsed.accounts_config);
+              }
+            }
+          } catch {}
+        }
+
+        setLoading(false);
+      } catch {
+        if (active) setLoading(false);
+      }
     }
     void loadPOS();
     return () => {
@@ -224,11 +231,11 @@ export default function StorePOSPage({ params }: { params: Promise<{ storeId: st
   }, [storeId]);
 
   const configuredBanks = useMemo(
-    () => shiftAccounts.filter((acc) => acc.type === "bank"),
+    () => (Array.isArray(shiftAccounts) ? shiftAccounts : []).filter((acc) => acc?.type === "bank"),
     [shiftAccounts],
   );
   const configuredWallets = useMemo(
-    () => shiftAccounts.filter((acc) => acc.type === "wallet"),
+    () => (Array.isArray(shiftAccounts) ? shiftAccounts : []).filter((acc) => acc?.type === "wallet"),
     [shiftAccounts],
   );
 
@@ -245,11 +252,17 @@ export default function StorePOSPage({ params }: { params: Promise<{ storeId: st
     }
   }
 
-  const categories = useMemo(() => [...new Set(products.map((product) => product.category))], [products]);
-  const filteredProducts = products.filter(
+  const categories = useMemo(
+    () => [...new Set((products ?? []).map((product) => product?.category).filter(Boolean))],
+    [products],
+  );
+  const filteredProducts = (products ?? []).filter(
     (product) =>
+      product &&
       (category === "all" || product.category === category) &&
-      `${product.name} ${product.sku} ${product.barcode ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
+      `${product.name ?? ""} ${product.sku ?? ""} ${product.barcode ?? ""}`
+        .toLocaleLowerCase()
+        .includes(search.toLocaleLowerCase()),
   );
   const subtotal = cart.reduce((sum, line) => sum + line.product.selling_price * line.quantity, 0);
   const itemDiscount = cart.reduce(

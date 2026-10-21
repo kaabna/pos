@@ -1,6 +1,8 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -20,8 +22,9 @@ const statuses: { value: RoadmapStatus; label: string }[] = [
 const priorities = [{ value: "high", label: "عالية" }, { value: "medium", label: "متوسطة" }, { value: "low", label: "منخفضة" }] as const;
 const emptyForm = { title: "", description: "", ownerId: "", priority: "medium" as "low" | "medium" | "high", status: "planned" as RoadmapStatus, dueDate: "", linkedTaskId: "" };
 
-export default function RoadmapPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function RoadmapPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [items, setItems] = useState<RoadmapItem[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [tasks, setTasks] = useState<TaskOption[]>([]);
@@ -40,7 +43,8 @@ export default function RoadmapPage({ params }: { params: Promise<{ storeId: str
         supabase.from("store_members").select("user_id").eq("store_id", storeId),
         supabase.from("tasks").select("id, title").eq("store_id", storeId).order("title"),
       ]);
-      const memberIds = (memberships ?? []).map((member) => member.user_id);
+      const memberList = (memberships as Array<{ user_id: string }> | null) ?? [];
+      const memberIds = memberList.map((member: { user_id: string }) => member.user_id);
       const { data: profiles } = memberIds.length ? await supabase.from("profiles").select("id, full_name").in("id", memberIds).order("full_name") : { data: [] };
       if (!active) return;
       if (error) setMessage("تعذر تحميل مبادرات هذا المتجر.");

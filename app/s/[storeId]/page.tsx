@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Boxes, ClipboardCheck, CreditCard, FileText, LayoutDashboard, Route, ShoppingCart, UserCog, Wrench } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -22,8 +23,10 @@ const modules: Module[] = [
   { slug: "roadmap", title: "خطة التطوير", description: "المبادرات ومتابعة التنفيذ", icon: Route, permission: "roadmap" },
 ];
 
-export default function StoreHomePage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function StoreHomePage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
+
   const [store, setStore] = useState<StoreRecord | null>(null);
   const [permissions, setPermissions] = useState<string[]>([]);
   const [isManager, setIsManager] = useState(false);
@@ -33,31 +36,43 @@ export default function StoreHomePage({ params }: { params: Promise<{ storeId: s
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (!storeId) return;
     let active = true;
+
     async function loadDashboard() {
-      const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      const [{ data: storeRow }, { data: profile }, { data: membership }] = await Promise.all([
-        supabase.from("stores").select("id, name, city, manager, status, sales_target, fixed_expenses").eq("id", storeId).maybeSingle(),
-        user ? supabase.from("profiles").select("role").eq("id", user.id).maybeSingle() : Promise.resolve({ data: null }),
-        user ? supabase.from("store_members").select("permissions").eq("user_id", user.id).eq("store_id", storeId).maybeSingle() : Promise.resolve({ data: null }),
-      ]);
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const [salesResult, repairsResult, inventoryResult] = await Promise.all([
-        supabase.from("sales").select("total").eq("store_id", storeId).gte("created_at", start.toISOString()),
-        supabase.from("repair_tickets").select("id", { count: "exact", head: true }).eq("store_id", storeId).not("status", "eq", "delivered"),
-        supabase.from("inventory_items").select("id", { count: "exact", head: true }).eq("store_id", storeId),
-      ]);
-      if (!active) return;
-      if (!storeRow) setMessage("تعذر العثور على المتجر أو ليس لديك صلاحية الوصول إليه.");
-      setStore((storeRow ?? null) as StoreRecord | null);
-      setIsManager(profile?.role === "owner" || profile?.role === "admin");
-      setPermissions(Array.isArray(membership?.permissions) ? membership.permissions : []);
-      setSalesToday((salesResult.data ?? []).reduce((sum, sale) => sum + sale.total, 0));
-      setOpenRepairs(repairsResult.count ?? 0);
-      setInventoryCount(inventoryResult.count ?? 0);
+      try {
+        const supabase = getSupabaseClient();
+        const { data: authData } = await supabase.auth.getUser();
+        const user = authData?.user;
+
+        const [{ data: storeRow }, { data: profile }, { data: membership }] = await Promise.all([
+          supabase.from("stores").select("id, name, city, manager, status, sales_target, fixed_expenses").eq("id", storeId).maybeSingle(),
+          user ? supabase.from("profiles").select("role").eq("id", user.id).maybeSingle() : Promise.resolve({ data: null }),
+          user ? supabase.from("store_members").select("permissions").eq("user_id", user.id).eq("store_id", storeId).maybeSingle() : Promise.resolve({ data: null }),
+        ]);
+
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+
+        const [salesResult, repairsResult, inventoryResult] = await Promise.all([
+          supabase.from("sales").select("total").eq("store_id", storeId).gte("created_at", start.toISOString()),
+          supabase.from("repair_tickets").select("id", { count: "exact", head: true }).eq("store_id", storeId).not("status", "eq", "delivered"),
+          supabase.from("inventory_items").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+        ]);
+
+        if (!active) return;
+        if (!storeRow) setMessage("تعذر العثور على المتجر أو ليس لديك صلاحية الوصول إليه.");
+        setStore((storeRow ?? null) as StoreRecord | null);
+        setIsManager(profile?.role === "owner" || profile?.role === "admin");
+        setPermissions(Array.isArray(membership?.permissions) ? membership.permissions : []);
+        setSalesToday(((salesResult.data as Array<{ total: number }> | null) ?? []).reduce((sum: number, sale: { total: number }) => sum + (Number(sale?.total) || 0), 0));
+        setOpenRepairs(repairsResult.count ?? 0);
+        setInventoryCount(inventoryResult.count ?? 0);
+      } catch {
+        if (active) setMessage("تعذر تحميل بيانات المتجر مؤقتًا.");
+      }
     }
+
     void loadDashboard();
     return () => { active = false; };
   }, [storeId]);
@@ -67,7 +82,20 @@ export default function StoreHomePage({ params }: { params: Promise<{ storeId: s
   return (
     <AppShell storeId={storeId}>
       <div className="space-y-6" dir="rtl">
-        {store ? <section className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-5"><div><p className="text-sm text-cyan-300">مساحة المتجر</p><h2 className="mt-2 text-2xl font-semibold text-white">{store.name}</h2><p className="mt-2 text-sm text-slate-300">{store.city} · المسؤول: {store.manager}</p></div><Badge variant={store.status === "active" ? "success" : store.status === "setup" ? "info" : "warning"}>{store.status === "active" ? "نشط" : store.status === "setup" ? "قيد الإعداد" : "متوقف"}</Badge></section> : <p role="status" className="text-slate-300">{message || "جارٍ تحميل المتجر..."}</p>}
+        {store ? (
+          <section className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-5">
+            <div>
+              <p className="text-sm text-cyan-300">مساحة المتجر</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">{store.name}</h2>
+              <p className="mt-2 text-sm text-slate-300">{store.city} · المسؤول: {store.manager}</p>
+            </div>
+            <Badge variant={store.status === "active" ? "success" : store.status === "setup" ? "info" : "warning"}>
+              {store.status === "active" ? "نشط" : store.status === "setup" ? "قيد الإعداد" : "متوقف"}
+            </Badge>
+          </section>
+        ) : (
+          <p role="status" className="text-slate-300">{message || "جارٍ تحميل المتجر..."}</p>
+        )}
         {message ? <p role="alert" className="text-sm text-rose-200">{message}</p> : null}
         <section className="grid gap-3 sm:grid-cols-3">
           {isManager || permissions.includes("ledger") ? (
@@ -78,12 +106,46 @@ export default function StoreHomePage({ params }: { params: Promise<{ storeId: s
           <Metric icon={Wrench} label="تذاكر صيانة مفتوحة" value={openRepairs === null ? "—" : new Intl.NumberFormat("ar-SA").format(openRepairs)} />
           <Metric icon={Boxes} label="أصناف المخزون" value={inventoryCount === null ? "—" : new Intl.NumberFormat("ar-SA").format(inventoryCount)} />
         </section>
-        <section><div className="mb-3 flex items-center gap-2"><LayoutDashboard size={18} className="text-cyan-300" /><h3 className="text-lg font-semibold text-white">وحدات المتجر</h3></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {visibleModules.map(({ slug, title, description, icon: Icon }) => <Link key={slug} href={`/s/${storeId}/${slug}`} className="block h-full"><Card className="h-full transition-colors hover:border-cyan-500/40"><CardContent className="flex h-full items-start gap-4 p-4"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300"><Icon size={19} /></span><span><span className="block font-semibold text-white">{title}</span><span className="mt-1 block text-sm text-slate-400">{description}</span></span></CardContent></Card></Link>)}
-        </div></section>
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <LayoutDashboard size={18} className="text-cyan-300" />
+            <h3 className="text-lg font-semibold text-white">وحدات المتجر</h3>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleModules.map(({ slug, title, description, icon: Icon }) => (
+              <Link key={slug} href={`/s/${storeId}/${slug}`} className="block h-full">
+                <Card className="h-full transition-colors hover:border-cyan-500/40">
+                  <CardContent className="flex h-full items-start gap-4 p-4">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300">
+                      <Icon size={19} />
+                    </span>
+                    <span>
+                      <span className="block font-semibold text-white">{title}</span>
+                      <span className="mt-1 block text-sm text-slate-400">{description}</span>
+                    </span>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
       </div>
     </AppShell>
   );
 }
 
-function Metric({ icon: Icon, label, value }: { icon: typeof LayoutDashboard; label: string; value: string }) { return <Card><CardContent className="flex items-center gap-3 p-4"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300"><Icon size={17} /></span><span><span className="block text-xs text-slate-400">{label}</span><span className="mt-1 block font-semibold text-white">{value}</span></span></CardContent></Card>; }
+function Metric({ icon: Icon, label, value }: { icon: typeof LayoutDashboard; label: string; value: string }) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-4">
+        <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300">
+          <Icon size={17} />
+        </span>
+        <span>
+          <span className="block text-xs text-slate-400">{label}</span>
+          <span className="mt-1 block font-semibold text-white">{value}</span>
+        </span>
+      </CardContent>
+    </Card>
+  );
+}

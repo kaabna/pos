@@ -1,6 +1,7 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,9 @@ type ShiftReport = {
 const money = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 2 });
 const paymentNames = { cash: "كاش (نقدي)", card: "فيزا", transfer: "البنوك (تحويل)", wallet: "المحافظ" };
 
-export default function LedgerPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function LedgerPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [sales, setSales] = useState<Sale[]>([]);
   const [saleItems, setSaleItems] = useState<SaleItem[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -52,7 +54,8 @@ export default function LedgerPage({ params }: { params: Promise<{ storeId: stri
         supabase.from("stores").select("fixed_expenses").eq("id", storeId).maybeSingle(),
       ]);
       if (!active) return;
-      const saleIds = (salesResult.data ?? []).map((sale) => sale.id);
+      const saleList = (salesResult.data as Array<{ id: string }> | null) ?? [];
+      const saleIds = saleList.map((sale: { id: string }) => sale.id);
       const { data: saleItemRows, error: saleItemsError } = saleIds.length
         ? await supabase.from("sale_items").select("sale_id, quantity, unit_cost").eq("store_id", storeId).in("sale_id", saleIds)
         : { data: [], error: null };

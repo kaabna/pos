@@ -29,7 +29,11 @@ export async function proxy(request: NextRequest) {
             request,
           });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              path: '/',
+              sameSite: 'lax',
+            })
           );
         },
       },
@@ -37,20 +41,45 @@ export async function proxy(request: NextRequest) {
   );
 
   function redirectTo(path: string) {
+    if (pathname === path) {
+      return supabaseResponse;
+    }
     const response = NextResponse.redirect(new URL(path, request.url));
-    supabaseResponse.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      response.cookies.set(cookie.name, cookie.value, {
+        path: '/',
+        sameSite: 'lax',
+      });
+    });
     return response;
   }
 
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch {
+    user = null;
+  }
+
   if (!user) {
     return isLogin ? supabaseResponse : redirectTo('/login');
   }
 
-  const [{ data: profile }, { data: memberships }] = await Promise.all([
-    supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
-    supabase.from('store_members').select('store_id, permissions').eq('user_id', user.id),
-  ]);
+  let profile: { role: string } | null = null;
+  let memberships: Array<{ store_id: string; permissions: string[] }> = [];
+
+  try {
+    const [profileRes, membershipsRes] = await Promise.all([
+      supabase.from('profiles').select('role').eq('id', user.id).maybeSingle(),
+      supabase.from('store_members').select('store_id, permissions').eq('user_id', user.id),
+    ]);
+    profile = profileRes.data;
+    memberships = (membershipsRes.data as Array<{ store_id: string; permissions: string[] }>) ?? [];
+  } catch {
+    profile = null;
+    memberships = [];
+  }
 
   if (!profile || !['owner', 'admin', 'employee'].includes(profile.role)) {
     if (isLogin) return supabaseResponse;
@@ -113,6 +142,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|apple-touch-icon.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
 };

@@ -1,5 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr';
 
+let client: ReturnType<typeof createBrowserClient> | null = null;
+
 function getSupabaseEnvironment() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -12,6 +14,13 @@ function getSupabaseEnvironment() {
 }
 
 export function getSupabaseClient() {
+  if (client) return client;
   const { url, anonKey } = getSupabaseEnvironment();
-  return createBrowserClient(url, anonKey);
+  client = createBrowserClient(url, anonKey, {
+    cookieOptions: {
+      path: '/',
+      sameSite: 'lax',
+    },
+  });
+  return client;
 }

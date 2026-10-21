@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, Camera, FolderPlus, Pencil, Plus, Trash2, Truck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -49,8 +49,9 @@ const emptyForm = {
   supplierId: "",
 };
 
-export default function StoreInventoryPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function StoreInventoryPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const router = useRouter();
   const [items, setItems] = useState<InventoryRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -73,26 +74,31 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (!storeId) return;
     let active = true;
     async function loadInventory() {
-      const supabase = getSupabaseClient();
-      const [{ data: rows, error }, { data: supplierRows }, categoriesRes] = await Promise.all([
-        supabase
-          .from("inventory_items")
-          .select("id, store_id, name, category, sku, barcode, quantity, cost_price, selling_price, discount, imei_tracking")
-          .eq("store_id", storeId)
-          .order("name"),
-        supabase.from("suppliers").select("id, name").eq("store_id", storeId).order("name"),
-        fetch(`/api/stores/${storeId}/categories`).then((res) => (res.ok ? res.json() : null)).catch(() => null),
-      ]);
-      if (!active) return;
-      if (error) setMessage("تعذر تحميل المخزون. تحقق من إعداد قاعدة البيانات وصلاحيات الحساب.");
-      setItems((rows ?? []) as InventoryRow[]);
-      setSuppliers((supplierRows ?? []) as SupplierOption[]);
-      if (categoriesRes && Array.isArray((categoriesRes as { categories?: CategoryOption[] }).categories)) {
-        setCustomCategories((categoriesRes as { categories: CategoryOption[] }).categories);
+      try {
+        const supabase = getSupabaseClient();
+        const [{ data: rows, error }, { data: supplierRows }, categoriesRes] = await Promise.all([
+          supabase
+            .from("inventory_items")
+            .select("id, store_id, name, category, sku, barcode, quantity, cost_price, selling_price, discount, imei_tracking")
+            .eq("store_id", storeId)
+            .order("name"),
+          supabase.from("suppliers").select("id, name").eq("store_id", storeId).order("name"),
+          fetch(`/api/stores/${storeId}/categories`).then((res) => (res.ok ? res.json() : null)).catch(() => null),
+        ]);
+        if (!active) return;
+        if (error) setMessage("تعذر تحميل المخزون. تحقق من إعداد قاعدة البيانات وصلاحيات الحساب.");
+        setItems((rows ?? []) as InventoryRow[]);
+        setSuppliers((supplierRows ?? []) as SupplierOption[]);
+        if (categoriesRes && Array.isArray((categoriesRes as { categories?: CategoryOption[] }).categories)) {
+          setCustomCategories((categoriesRes as { categories: CategoryOption[] }).categories);
+        }
+        setLoading(false);
+      } catch {
+        if (active) setLoading(false);
       }
-      setLoading(false);
     }
     void loadInventory();
     return () => {
@@ -118,10 +124,11 @@ export default function StoreInventoryPage({ params }: { params: Promise<{ store
 
   const visibleItems = useMemo(
     () =>
-      items.filter(
+      (items ?? []).filter(
         (item) =>
+          item &&
           (filter === "all" || item.category === filter) &&
-          `${item.name} ${item.sku} ${item.barcode ?? ""} ${getCategoryLabel(item.category)}`
+          `${item.name ?? ""} ${item.sku ?? ""} ${item.barcode ?? ""} ${getCategoryLabel(item.category ?? "")}`
             .toLocaleLowerCase()
             .includes(search.toLocaleLowerCase()),
       ),

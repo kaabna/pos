@@ -1,6 +1,8 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -26,8 +28,9 @@ const statuses: { value: RepairStatus; label: string; variant: "default" | "succ
 const emptyForm = { customer: "", phone: "", deviceType: "هاتف", model: "", serial: "", issue: "", status: "pending" as RepairStatus, usedParts: [{ name: "", cost: "0" }], finalPrice: "", deposit: "0", notes: "" };
 const money = new Intl.NumberFormat("ar-SA", { maximumFractionDigits: 2 });
 
-export default function RepairsPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function RepairsPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [showForm, setShowForm] = useState(false);

@@ -1,6 +1,8 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useParams } from "next/navigation";
+
+import { useEffect, useState } from "react";
 import { Plus, Save, Truck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
@@ -15,8 +17,9 @@ type PurchaseLine = { inventoryItemId: string; quantity: string; unitCost: strin
 
 const emptyLine: PurchaseLine = { inventoryItemId: "", quantity: "1", unitCost: "" };
 
-export default function PurchasesPage({ params }: { params: Promise<{ storeId: string }> }) {
-  const { storeId } = use(params);
+export default function PurchasesPage() {
+  const routeParams = useParams();
+  const storeId = (routeParams?.storeId as string) || "";
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [items, setItems] = useState<StockItem[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
