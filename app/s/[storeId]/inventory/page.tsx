@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { AlertTriangle, Camera, FolderPlus, Pencil, Plus, Trash2, Truck } from "lucide-react";
+import { AlertTriangle, Camera, FileSpreadsheet, FolderPlus, Pencil, Plus, Trash2, Truck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BarcodeScanner } from "@/components/barcode-scanner";
+import { ExcelImportModal } from "@/components/excel-import-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,10 +69,28 @@ export default function StoreInventoryPage() {
   const [itemToDelete, setItemToDelete] = useState<InventoryRow | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [showExcelImport, setShowExcelImport] = useState(false);
   const [scannerTarget, setScannerTarget] = useState<"search" | "item" | "edit">("search");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+
+  async function reloadInventory() {
+    if (!storeId) return;
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rows, error } = await supabase
+        .from("inventory_items")
+        .select("id, store_id, name, category, sku, barcode, quantity, cost_price, selling_price, discount, imei_tracking")
+        .eq("store_id", storeId)
+        .order("name");
+      if (!error && rows) {
+        setItems(rows as InventoryRow[]);
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     if (!storeId) return;
@@ -325,6 +344,14 @@ export default function StoreInventoryPage() {
               }}
             >
               <Plus size={16} /> إضافة عنصر
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowExcelImport(true)}
+              className="border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10"
+            >
+              <FileSpreadsheet size={16} /> استيراد من إكسل
             </Button>
             <Button type="button" variant="secondary" onClick={() => setShowCategoryInput((prev) => !prev)}>
               <FolderPlus size={16} /> إضافة تصنيف جديد
@@ -850,6 +877,16 @@ export default function StoreInventoryPage() {
           }}
         />
       ) : null}
+
+      <ExcelImportModal
+        storeId={storeId}
+        existingItems={items}
+        isOpen={showExcelImport}
+        onClose={() => setShowExcelImport(false)}
+        onSuccess={() => {
+          void reloadInventory();
+        }}
+      />
     </AppShell>
   );
 }
