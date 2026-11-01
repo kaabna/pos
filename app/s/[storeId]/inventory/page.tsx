@@ -1,17 +1,25 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, Camera, Download, FileSpreadsheet, FolderPlus, Pencil, Plus, Trash2, Truck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { BarcodeScanner } from "@/components/barcode-scanner";
-import { ExcelExportModal } from "@/components/excel-export-modal";
-import { ExcelImportModal } from "@/components/excel-import-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSupabaseClient } from "@/lib/supabase";
+
+const ExcelExportModal = dynamic(
+  () => import("@/components/excel-export-modal").then((m) => m.ExcelExportModal),
+  { ssr: false }
+);
+const ExcelImportModal = dynamic(
+  () => import("@/components/excel-import-modal").then((m) => m.ExcelImportModal),
+  { ssr: false }
+);
 
 type InventoryRow = {
   id: string;

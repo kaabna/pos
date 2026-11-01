@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+// Dynamic import of XLSX is used inside export functions to keep the initial client bundle lightweight
 
 export type InventoryExportItem = {
   id: string;
@@ -22,10 +22,11 @@ export type InventoryExportOptions = {
 /**
  * Export customized inventory report to Excel (.xlsx)
  */
-export function exportInventoryToExcel(
+export async function exportInventoryToExcel(
   items: InventoryExportItem[],
   options: InventoryExportOptions
 ) {
+  const XLSX = await import("xlsx");
   const getCategoryLabel = (cat: string) => options.categoryNameMap?.[cat] || cat;
   const wb = XLSX.utils.book_new();
 
@@ -213,7 +214,8 @@ const expenseCategoryArabic: Record<string, string> = {
 /**
  * Export Comprehensive Multi-Sheet Financial Report to Excel (.xlsx)
  */
-export function exportFinancialReportToExcel(report: FinancialReportPayload) {
+export async function exportFinancialReportToExcel(report: FinancialReportPayload) {
+  const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
 
   // Sheet 1: الملخص المالي العام (Summary)

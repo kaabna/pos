@@ -16,7 +16,6 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { exportFinancialReportToExcel } from "@/lib/excel-export";
 import { getSupabaseClient } from "@/lib/supabase";
 
 type Sale = {
@@ -363,9 +362,10 @@ export default function LedgerPage() {
     setSaving(false);
   }
 
-  // Export to Excel Handler
-  function handleExportExcel() {
-    exportFinancialReportToExcel({
+  // Export to Excel Handler (dynamic import to prevent bloating bundle)
+  async function handleExportExcel() {
+    const { exportFinancialReportToExcel } = await import("@/lib/excel-export");
+    await exportFinancialReportToExcel({
       periodLabel: rangeInfo.label,
       dateRangeText: rangeInfo.text,
       totals,

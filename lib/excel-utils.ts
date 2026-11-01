@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+// Dynamic import of XLSX is used inside parsing/download functions to keep the initial client bundle lightweight
 
 export type ParsedInventoryItem = {
   barcode: string | null;
@@ -55,7 +55,8 @@ export const SAMPLE_TEMPLATE_ROWS = [
 /**
  * Download a sample Excel spreadsheet
  */
-export function downloadSampleExcelTemplate() {
+export async function downloadSampleExcelTemplate() {
+  const XLSX = await import("xlsx");
   const ws = XLSX.utils.json_to_sheet(SAMPLE_TEMPLATE_ROWS);
 
   // Set column widths
@@ -96,6 +97,7 @@ function findValue(row: Record<string, unknown>, keys: string[]): unknown {
  * Parse uploaded file (xlsx, xls, csv) into raw objects
  */
 export async function parseExcelOrCsvFile(file: File): Promise<Record<string, unknown>[]> {
+  const XLSX = await import("xlsx");
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {

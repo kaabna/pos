@@ -36,19 +36,86 @@ const storeNavigation: NavItem[] = [
   { href: "/roadmap", label: "خطة التطوير", icon: Route, module: "roadmap" },
 ];
 
+type ShellCacheData = {
+  role: AppRole;
+  permissions: string[];
+  stores: StoreChoice[];
+  currentStore: StoreChoice | null;
+  timestamp: number;
+};
+
+const CACHE_TTL_MS = 3 * 60 * 1000; // ذاكرة مؤقتة لـ 3 دقائق تمنع تكرار 4 استعلامات شبكة مع كل نقرة
+const memoryCache: Record<string, ShellCacheData> = {};
+
+function getCachedShellData(storeId?: string): ShellCacheData | null {
+  const key = storeId || "__root__";
+  const inMem = memoryCache[key];
+  if (inMem && Date.now() - inMem.timestamp < CACHE_TTL_MS) {
+    return inMem;
+  }
+  if (typeof window !== "undefined") {
+    try {
+      const raw = sessionStorage.getItem(`app_shell_${key}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ShellCacheData;
+        if (Date.now() - parsed.timestamp < CACHE_TTL_MS) {
+          memoryCache[key] = parsed;
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
+function setCachedShellData(storeId: string | undefined, data: Omit<ShellCacheData, "timestamp">) {
+  const key = storeId || "__root__";
+  const entry: ShellCacheData = { ...data, timestamp: Date.now() };
+  memoryCache[key] = entry;
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage.setItem(`app_shell_${key}`, JSON.stringify(entry));
+    } catch {}
+  }
+}
+
+function clearCachedShellData() {
+  for (const k of Object.keys(memoryCache)) {
+    delete memoryCache[k];
+  }
+  if (typeof window !== "undefined") {
+    try {
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i);
+        if (k && k.startsWith("app_shell_")) {
+          sessionStorage.removeItem(k);
+        }
+      }
+    } catch {}
+  }
+}
+
 export function AppShell({ children, storeId }: { children: ReactNode; storeId?: string }) {
   const pathname = usePathname();
   const currentPath = pathname ?? "";
   const router = useRouter();
-  const [role, setRole] = useState<AppRole | null>(null);
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [stores, setStores] = useState<StoreChoice[]>([]);
-  const [currentStore, setCurrentStore] = useState<StoreChoice | null>(null);
+
+  // تهيئة الحالة فورياً من الذاكرة المؤقتة لمنع وميض وتأخير القائمة الجانبية
+  const initialCache = getCachedShellData(storeId);
+  const [role, setRole] = useState<AppRole | null>(initialCache?.role ?? null);
+  const [permissions, setPermissions] = useState<string[]>(initialCache?.permissions ?? []);
+  const [stores, setStores] = useState<StoreChoice[]>(initialCache?.stores ?? []);
+  const [currentStore, setCurrentStore] = useState<StoreChoice | null>(initialCache?.currentStore ?? null);
 
   useEffect(() => {
     let active = true;
 
     async function loadAccess() {
+      // إذا كانت البيانات محملة وطازجة قبل أقل من دقيقة، لا نعيد استعلام الشبكة
+      if (initialCache && Date.now() - initialCache.timestamp < 60 * 1000) {
+        return;
+      }
+
       try {
         const supabase = getSupabaseClient();
         const { data: authData } = await supabase.auth.getUser();
@@ -71,7 +138,8 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
 
         const memberList = (memberships as Array<{ store_id: string; permissions: string[] }> | null) ?? [];
         const member = memberList.find((item: { store_id?: string }) => item?.store_id === storeId) ?? memberList[0];
-        setPermissions(Array.isArray(member?.permissions) ? member.permissions : []);
+        const resolvedPermissions = Array.isArray(member?.permissions) ? member.permissions : [];
+        setPermissions(resolvedPermissions);
         const allowedStoreIds = new Set(memberList.filter((item) => Boolean(item?.store_id)).map((item: { store_id: string }) => item.store_id));
 
         let allStores: StoreChoice[] = [];
@@ -102,6 +170,16 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
         setStores(visibleStores);
         const resolvedCurrent = (storeId ? visibleStores.find((store) => store.id === storeId) : null) ?? visibleStores[0] ?? null;
         setCurrentStore(resolvedCurrent);
+
+        // حفظ في الكاش لتسريع التنقل
+        if (userRole) {
+          setCachedShellData(storeId, {
+            role: userRole as AppRole,
+            permissions: resolvedPermissions,
+            stores: visibleStores,
+            currentStore: resolvedCurrent,
+          });
+        }
       } catch {
         // حماية التطبيق من أي انهيار غير متوقع أثناء معالجة الجلسة
       }
@@ -111,7 +189,7 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
     return () => {
       active = false;
     };
-  }, [router, storeId]);
+  }, [initialCache, router, storeId]);
 
   const isManager = role === "owner" || role === "admin";
   const navigation = storeId
@@ -119,6 +197,7 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
     : [{ href: "/stores", label: "المحلات", icon: StoreIcon }];
 
   async function signOut() {
+    clearCachedShellData();
     try {
       await getSupabaseClient().auth.signOut();
     } finally {
@@ -172,6 +251,7 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
                 <Link
                   key={resolvedHref}
                   href={resolvedHref}
+                  prefetch={false}
                   className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors ${
                     isActive ? "border-cyan-500/50 bg-cyan-500/10 text-white" : "border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-900 hover:text-white"
                   }`}
@@ -193,7 +273,7 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
               </h1>
             </div>
             <div className="flex items-center justify-between gap-3">
-              {isManager && storeId ? <Link href="/stores" className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"><StoreIcon size={15} /> كل المحلات</Link> : null}
+              {isManager && storeId ? <Link href="/stores" prefetch={false} className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"><StoreIcon size={15} /> كل المحلات</Link> : null}
               <span className="text-sm text-slate-300">
                 {role === "owner" ? "مالك النظام" : role === "admin" ? "مدير النظام" : role === "employee" ? "موظف" : ""}
               </span>

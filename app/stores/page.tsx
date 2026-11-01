@@ -90,7 +90,7 @@ export default function StoresPage() {
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {stores.map((store) => (
-            <Link key={store.id} href={`/s/${store.id}`} className="block h-full">
+            <Link key={store.id} href={`/s/${store.id}`} prefetch={false} className="block h-full">
               <Card className="h-full p-5 transition-colors hover:border-cyan-500/40">
                 <CardHeader className="mb-4 flex-row items-start justify-between gap-3">
                   <CardTitle className="text-white">{store.name}</CardTitle>

@@ -100,7 +100,7 @@ export function ExcelExportModal({
 
   if (!isOpen) return null;
 
-  function handleExport() {
+  async function handleExport() {
     let filterLabel = "كافة_المخزون";
     if (filterType === "category") {
       filterLabel = `جرد_قسم_${categoryNameMap[selectedCategory] || selectedCategory}`;
@@ -112,7 +112,7 @@ export function ExcelExportModal({
       filterLabel = `جرد_بحث_${currentSearch.slice(0, 10)}`;
     }
 
-    exportInventoryToExcel(filteredItems, {
+    await exportInventoryToExcel(filteredItems, {
       format,
       filterLabel,
       categoryNameMap,

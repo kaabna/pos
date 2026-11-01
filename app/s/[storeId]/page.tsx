@@ -113,7 +113,7 @@ export default function StoreHomePage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visibleModules.map(({ slug, title, description, icon: Icon }) => (
-              <Link key={slug} href={`/s/${storeId}/${slug}`} className="block h-full">
+              <Link key={slug} href={`/s/${storeId}/${slug}`} prefetch={false} className="block h-full">
                 <Card className="h-full transition-colors hover:border-cyan-500/40">
                   <CardContent className="flex h-full items-start gap-4 p-4">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 text-cyan-300">

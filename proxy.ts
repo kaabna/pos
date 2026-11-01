@@ -16,6 +16,45 @@ export async function proxy(request: NextRequest) {
     return isLoginPage ? supabaseResponse : NextResponse.redirect(new URL('/login', request.url));
   }
 
+  // دالة مساعدة لإعادة التوجيه مع نقل جميع الكوكيز المحدثة لمنع الحلقات المفرغة
+  function redirectWithCookies(targetPath: string) {
+    if (pathname === targetPath) {
+      return supabaseResponse;
+    }
+    const redirectUrl = new URL(targetPath, request.url);
+    const redirectResponse = NextResponse.redirect(redirectUrl);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
+    });
+    return redirectResponse;
+  }
+
+  // 1. التحقق من وجود كوكيز المصادقة في المتصفح أولاً قبل أي استدعاء شبكة خارجي
+  const allCookies = request.cookies.getAll();
+  const hasAuthCookie = allCookies.some(
+    (c) => c.name.startsWith('sb-') && c.name.includes('-auth-token')
+  );
+
+  // إذا لم يكن لدى الزائر أي كوكيز مصادقة لـ Supabase:
+  // فهو حتماً غير مسجل دخول - نتجنب تماماً استدعاء شبكة خارجي ثقيل
+  if (!hasAuthCookie) {
+    if (isLoginPage) {
+      return supabaseResponse;
+    }
+    return redirectWithCookies('/login');
+  }
+
+  // 2. فحص ما إذا كان الطلب مجرد استعلام مسبق في الخلفية (Prefetch) بواسطة Next.js
+  // تمريره فوراً لتفريغ سعة الشبكة ومنع طوفان الاتصالات المتزامنة لـ Supabase
+  const isPrefetch =
+    request.headers.get('next-router-prefetch') === '1' ||
+    request.headers.get('purpose') === 'prefetch' ||
+    request.headers.get('sec-purpose') === 'prefetch';
+
+  if (isPrefetch) {
+    return supabaseResponse;
+  }
+
   const supabase = createServerClient(
     url,
     anonKey,
@@ -37,26 +76,13 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  // تحديث الجلسة والتحقق من وجود المستخدم بطريقة قياسية وخفيفة
+  // تحديث الجلسة والتحقق من وجود المستخدم
   let user = null;
   try {
     const { data } = await supabase.auth.getUser();
     user = data.user;
   } catch {
     user = null;
-  }
-
-  // دالة مساعدة لإعادة التوجيه مع نقل جميع الكوكيز المحدثة لمنع الحلقات المفرغة
-  function redirectWithCookies(targetPath: string) {
-    if (pathname === targetPath) {
-      return supabaseResponse;
-    }
-    const redirectUrl = new URL(targetPath, request.url);
-    const redirectResponse = NextResponse.redirect(redirectUrl);
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value, cookie);
-    });
-    return redirectResponse;
   }
 
   // 1. المستخدم غير مسجل دخول ويحاول فتح صفحة محمية
@@ -84,7 +110,7 @@ export const config = {
   matcher: [
     /*
      * استثناء مسارات الـ API بالكامل والملفات الثابتة والأيقونات
-     * لمنع أي إعادة توجيه خاطئة أو تعليق لطلبات الـ JSON على سفاري والآيفون
+     * لمنع أي استهلاك لموارد الشبكة على سفاري والأجهزة المحمولة
      */
     '/((?!api|_next/static|_next/image|favicon.ico|apple-touch-icon.*|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|webmanifest)$).*)',
   ],
