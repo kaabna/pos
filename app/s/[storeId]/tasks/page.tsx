@@ -34,7 +34,8 @@ export default function TasksPage() {
     let active = true;
     async function loadTasks() {
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
       if (!user) return;
       const [{ data: profile }, { data: taskRows }, { data: memberships }] = await Promise.all([
         supabase.from("profiles").select("role").eq("id", user.id).maybeSingle(),

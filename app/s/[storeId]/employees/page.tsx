@@ -71,7 +71,8 @@ export default function EmployeesPage() {
     let active = true;
     async function loadEmployees() {
       const supabase = getSupabaseClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
       const { data: memberships, error } = await supabase
         .from("store_members")
         .select("user_id, permissions")

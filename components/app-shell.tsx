@@ -70,9 +70,9 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
         }
 
         const memberList = (memberships as Array<{ store_id: string; permissions: string[] }> | null) ?? [];
-        const member = memberList.find((item: { store_id: string }) => item.store_id === storeId) ?? memberList[0];
+        const member = memberList.find((item: { store_id?: string }) => item?.store_id === storeId) ?? memberList[0];
         setPermissions(Array.isArray(member?.permissions) ? member.permissions : []);
-        const allowedStoreIds = new Set(memberList.map((item: { store_id: string }) => item.store_id));
+        const allowedStoreIds = new Set(memberList.filter((item) => Boolean(item?.store_id)).map((item: { store_id: string }) => item.store_id));
 
         let allStores: StoreChoice[] = [];
         if (Array.isArray(storeRows)) {
@@ -122,8 +122,7 @@ export function AppShell({ children, storeId }: { children: ReactNode; storeId?:
     try {
       await getSupabaseClient().auth.signOut();
     } finally {
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = "/login";
+      window.location.replace("/login");
     }
   }
 

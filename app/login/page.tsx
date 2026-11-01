@@ -44,8 +44,8 @@ export default function LoginPage() {
       }
 
       if (profile.role === "owner" || profile.role === "admin") {
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-        window.location.href = "/stores";
+        await new Promise((r) => setTimeout(r, 100));
+        window.location.replace("/stores");
         return;
       }
 
@@ -71,8 +71,9 @@ export default function LoginPage() {
       );
       
       const targetUrl = firstModule ? `/s/${memberData.store_id}/${firstModule}` : `/s/${memberData.store_id}`;
-      // استخدام window.location.href لتوجيه المتصفح بشكل كامل مع تأكيد حفظ وإرسال ملفات الكوكيز في سفاري / iOS
-      window.location.href = targetUrl;
+      // تأخير بسيط وتوجيه نظيف عبر replace لضمان تثبيت الكوكيز في نظام iOS WebKit دون تكرار التاريخ
+      await new Promise((r) => setTimeout(r, 100));
+      window.location.replace(targetUrl);
     } catch (caught) {
       const errorMessage = caught instanceof Error ? caught.message : "";
       const message = ["صلاحية", "هذا الحساب", "لا يوجد", "لم يتم"].some((prefix) => errorMessage.startsWith(prefix))

@@ -65,9 +65,9 @@ export default function StoreHomePage() {
         setStore((storeRow ?? null) as StoreRecord | null);
         setIsManager(profile?.role === "owner" || profile?.role === "admin");
         setPermissions(Array.isArray(membership?.permissions) ? membership.permissions : []);
-        setSalesToday(((salesResult.data as Array<{ total: number }> | null) ?? []).reduce((sum: number, sale: { total: number }) => sum + (Number(sale?.total) || 0), 0));
-        setOpenRepairs(repairsResult.count ?? 0);
-        setInventoryCount(inventoryResult.count ?? 0);
+        setSalesToday(((salesResult?.data as Array<{ total: number }> | null) ?? []).reduce((sum: number, sale: { total: number }) => sum + (Number(sale?.total) || 0), 0));
+        setOpenRepairs(repairsResult?.count ?? 0);
+        setInventoryCount(inventoryResult?.count ?? 0);
       } catch {
         if (active) setMessage("تعذر تحميل بيانات المتجر مؤقتًا.");
       }
