@@ -75,10 +75,28 @@ export default function LoginPage() {
       await new Promise((r) => setTimeout(r, 100));
       window.location.replace(targetUrl);
     } catch (caught) {
-      const errorMessage = caught instanceof Error ? caught.message : "";
-      const message = ["صلاحية", "هذا الحساب", "لا يوجد", "لم يتم"].some((prefix) => errorMessage.startsWith(prefix))
-        ? errorMessage
-        : "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور ثم حاول مجددًا.";
+      const errorMessage = caught instanceof Error ? caught.message : String(caught);
+      let message = "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور ثم حاول مجددًا.";
+
+      if (
+        errorMessage.includes("Failed to fetch") ||
+        errorMessage.includes("fetch failed") ||
+        errorMessage.includes("NetworkError") ||
+        errorMessage.includes("ENOTFOUND")
+      ) {
+        message = "تعذر الاتصال بقاعدة البيانات (Supabase). يرجى التأكد من أن مشروع Supabase نشط وغير متوقف مؤقتًا (Project is not Paused) في لوحة التحكم.";
+      } else if (errorMessage.includes("Invalid login credentials")) {
+        message = "البريد الإلكتروني أو كلمة المرور غير صحيحة. يرجى التأكد من صحة البيانات والمحاولة مجددًا.";
+      } else if (errorMessage.includes("Email not confirmed")) {
+        message = "لم يتم تأكيد هذا البريد الإلكتروني بعد. يرجى تأكيده أولاً عبر لوحة تحكم Supabase أو رابط التفعيل.";
+      } else if (errorMessage.includes("rate limit") || errorMessage.includes("Too many requests")) {
+        message = "تم تجاوز عدد المحاولات المسموح بها مؤقتًا. يرجى الانتظار بضع دقائق والمحاولة مجددًا.";
+      } else if (["صلاحية", "هذا الحساب", "لا يوجد", "لم يتم"].some((prefix) => errorMessage.startsWith(prefix))) {
+        message = errorMessage;
+      } else if (errorMessage) {
+        message = `خطأ في تسجيل الدخول: ${errorMessage}`;
+      }
+
       setError(message);
       setIsLoading(false);
     }
