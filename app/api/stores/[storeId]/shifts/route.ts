@@ -45,7 +45,8 @@ const defaultAccountsConfig: ShiftAccountConfig[] = [
 
 async function getAuthContext(storeId: string) {
   const sessionClient = await createServerSupabaseClient();
-  const { data: { user } } = await sessionClient.auth.getUser();
+  const { data: authData } = await sessionClient.auth.getUser();
+  const user = authData?.user;
   if (!user) return null;
 
   const db = getAdminClient() ?? sessionClient;

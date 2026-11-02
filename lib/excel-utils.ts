@@ -120,6 +120,13 @@ export async function parseExcelOrCsvFile(file: File): Promise<Record<string, un
   });
 }
 
+function cleanExcelCell(val: string): string {
+  if (val && ["=", "+", "-", "@", "\t", "\r"].includes(val[0])) {
+    return `'${val}`;
+  }
+  return val;
+}
+
 /**
  * Map raw rows into ParsedInventoryItem matching against existing items
  */
@@ -164,11 +171,11 @@ export function processRawRows(
 
     // Extract name
     const rawName = findValue(raw, ["name", "اسم الصنف", "اسم المنتج", "الاسم", "الصنف", "المنتج", "item", "product", "title"]);
-    const name = rawName !== undefined && rawName !== null ? String(rawName).trim() : "";
+    const name = rawName !== undefined && rawName !== null ? cleanExcelCell(String(rawName).trim()) : "";
 
     // Extract SKU
     const rawSku = findValue(raw, ["sku", "رمز الصنف", "رمز", "كود الصنف"]);
-    const sku = rawSku !== undefined && rawSku !== null ? String(rawSku).trim() : "";
+    const sku = rawSku !== undefined && rawSku !== null ? cleanExcelCell(String(rawSku).trim()) : "";
 
     // Extract Quantity
     const rawQty = findValue(raw, ["quantity", "qty", "الكمية", "كمية", "العدد", "عدد", "الرصيد", "stock", "count"]);
@@ -187,7 +194,7 @@ export function processRawRows(
 
     // Extract Category
     const rawCategory = findValue(raw, ["category", "التصنيف", "الفئة", "القسم", "نوع"]);
-    const category = rawCategory !== undefined && rawCategory !== null && String(rawCategory).trim() !== "" ? String(rawCategory).trim() : "accessory";
+    const category = rawCategory !== undefined && rawCategory !== null && String(rawCategory).trim() !== "" ? cleanExcelCell(String(rawCategory).trim()) : "accessory";
 
     // Extract Discount
     const rawDiscount = findValue(raw, ["discount", "الخصم", "نسبة الخصم"]);

@@ -1,5 +1,19 @@
 // Dynamic import of XLSX is used inside export functions to keep the initial client bundle lightweight
 
+/**
+ * Sanitize cell values against CSV/Excel Formula Injection (CWE-1236)
+ * If a string begins with '=', '+', '-', '@', '\t', or '\r', prefix with a single quote "'"
+ */
+export function sanitizeForExcel(value: unknown): unknown {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length > 0 && ["=", "+", "-", "@", "\t", "\r"].includes(trimmed[0])) {
+      return `'${value}`;
+    }
+  }
+  return value;
+}
+
 export type InventoryExportItem = {
   id: string;
   name: string;
@@ -50,10 +64,10 @@ export async function exportInventoryToExcel(
 
       return {
         "م": index + 1,
-        "الباركود": item.barcode || "—",
-        "رمز الصنف (SKU)": item.sku || "—",
-        "اسم الصنف": item.name,
-        "التصنيف": getCategoryLabel(item.category),
+        "الباركود": sanitizeForExcel(item.barcode || "—"),
+        "رمز الصنف (SKU)": sanitizeForExcel(item.sku || "—"),
+        "اسم الصنف": sanitizeForExcel(item.name),
+        "التصنيف": sanitizeForExcel(getCategoryLabel(item.category)),
         "الكمية بالمتجر": qty,
         "سعر التكلفة (د.إ)": cost,
         "سعر البيع (د.إ)": price,
@@ -102,10 +116,10 @@ export async function exportInventoryToExcel(
     // 2. Physical Count Sheet (ورقة جرد فعلي للمطابقة والعد الميداني)
     const dataRows = items.map((item, index) => ({
       "م": index + 1,
-      "الباركود": item.barcode || "—",
-      "رمز الصنف (SKU)": item.sku || "—",
-      "اسم الصنف": item.name,
-      "التصنيف": getCategoryLabel(item.category),
+      "الباركود": sanitizeForExcel(item.barcode || "—"),
+      "رمز الصنف (SKU)": sanitizeForExcel(item.sku || "—"),
+      "اسم الصنف": sanitizeForExcel(item.name),
+      "التصنيف": sanitizeForExcel(getCategoryLabel(item.category)),
       "الرصيد بالنظام": Number(item.quantity) || 0,
       "العدد الفعلي بالمحل [يدوي]": "",
       "الفارق (+ / -) [يدوي]": "",
@@ -264,7 +278,7 @@ export async function exportFinancialReportToExcel(report: FinancialReportPayloa
       "التاريخ": exp.expense_date,
       "نوع المصروف": expenseCategoryArabic[exp.category || ""] || exp.category || "تشغيلي",
       "المبلغ (د.إ)": Number(exp.amount.toFixed(2)),
-      "البيان / ملاحظات": exp.note || "—",
+      "البيان / ملاحظات": sanitizeForExcel(exp.note || "—"),
     }));
     const wsExp = XLSX.utils.json_to_sheet(expRows);
     wsExp["!cols"] = [{ wch: 6 }, { wch: 14 }, { wch: 18 }, { wch: 16 }, { wch: 35 }];
@@ -292,7 +306,7 @@ export async function exportFinancialReportToExcel(report: FinancialReportPayloa
   if (report.shifts.length > 0) {
     const shiftRows = report.shifts.map((s, i) => ({
       "م": i + 1,
-      "الموظف": s.cashier_name,
+      "الموظف": sanitizeForExcel(s.cashier_name),
       "وقت الإغلاق": s.closed_at ? new Date(s.closed_at).toLocaleString("ar-SA") : "—",
       "كاش متوقع": Number(s.expected_cash) || 0,
       "كاش فعلي": Number(s.actual_cash) || 0,

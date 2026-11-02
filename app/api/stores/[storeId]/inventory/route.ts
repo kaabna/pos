@@ -14,9 +14,8 @@ function getAdminClient() {
 
 async function verifyStoreAccess(storeId: string) {
   const sessionClient = await createServerSupabaseClient();
-  const {
-    data: { user },
-  } = await sessionClient.auth.getUser();
+  const { data: authData } = await sessionClient.auth.getUser();
+  const user = authData?.user;
   if (!user) return { authorized: false as const, sessionClient, user: null };
 
   const [{ data: profile }, { data: membership }] = await Promise.all([

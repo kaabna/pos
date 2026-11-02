@@ -17,7 +17,8 @@ function getAdminClient() {
 export async function POST(request: NextRequest, context: RouteContext<"/api/stores/[storeId]/employees">) {
   const { storeId } = await context.params;
   const sessionClient = await createServerSupabaseClient();
-  const { data: { user } } = await sessionClient.auth.getUser();
+  const { data: authData } = await sessionClient.auth.getUser();
+  const user = authData?.user;
   if (!user) return NextResponse.json({ message: "يلزم تسجيل الدخول." }, { status: 401 });
 
   const { data: profile } = await sessionClient.from("profiles").select("role").eq("id", user.id).maybeSingle();
@@ -140,7 +141,8 @@ export async function POST(request: NextRequest, context: RouteContext<"/api/sto
 export async function PATCH(request: NextRequest, context: RouteContext<"/api/stores/[storeId]/employees">) {
   const { storeId } = await context.params;
   const sessionClient = await createServerSupabaseClient();
-  const { data: { user } } = await sessionClient.auth.getUser();
+  const { data: authData } = await sessionClient.auth.getUser();
+  const user = authData?.user;
   if (!user) return NextResponse.json({ message: "يلزم تسجيل الدخول." }, { status: 401 });
 
   const { data: profile } = await sessionClient.from("profiles").select("role").eq("id", user.id).maybeSingle();
@@ -201,7 +203,8 @@ export async function PATCH(request: NextRequest, context: RouteContext<"/api/st
 export async function DELETE(request: NextRequest, context: RouteContext<"/api/stores/[storeId]/employees">) {
   const { storeId } = await context.params;
   const sessionClient = await createServerSupabaseClient();
-  const { data: { user } } = await sessionClient.auth.getUser();
+  const { data: authData } = await sessionClient.auth.getUser();
+  const user = authData?.user;
   if (!user) return NextResponse.json({ message: "يلزم تسجيل الدخول." }, { status: 401 });
 
   const { data: profile } = await sessionClient.from("profiles").select("role").eq("id", user.id).maybeSingle();
